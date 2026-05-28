@@ -1050,20 +1050,20 @@ document.querySelectorAll('.rx,.rx2').forEach(el=>obs.observe(el));
 /* pick score demo */
 const scenarioData={
   soft:{
-    lift:17,
-    clipBase:1800,
+    difficulty:.54,
+    baseClips:1800,
     title:'Capture soft-object failures',
     note:'Record grip pressure, deformation, slip angle, and recovery attempts.'
   },
   reflective:{
-    lift:14,
-    clipBase:2200,
+    difficulty:.62,
+    baseClips:2200,
     title:'Capture reflection failures',
     note:'Record glare angle, sensor dropout, false edges, and corrected approach paths.'
   },
   messy:{
-    lift:20,
-    clipBase:2600,
+    difficulty:.72,
+    baseClips:2600,
     title:'Capture occlusion failures',
     note:'Record blocked views, bad approach angles, collision points, and clean retries.'
   }
@@ -1085,24 +1085,39 @@ const captureNote=document.getElementById('captureNote');
 function formatClips(n){
   return n>=1000?(n/1000).toFixed(n%1000===0?0:1)+'K':String(n);
 }
+function clamp(value,min,max){
+  return Math.min(max,Math.max(min,value));
+}
+function getDemoProjection(scenario,success,clips,complexity){
+  const baseline=success/100;
+  const complexityIndex=complexity/10;
+  const targetReliability=clamp(.92-(scenario.difficulty*.08)-(complexityIndex*.06),.74,.9);
+  const reliabilityGap=Math.max(0,targetReliability-baseline);
+  const recommended=Math.round((scenario.baseClips*(.75+(complexity*.075))*(1+(reliabilityGap*.65)))/100)*100;
+  const coverageRatio=clamp(clips/recommended,0,1.5);
+  const dataEffectiveness=1-Math.exp(-2.2*coverageRatio);
+  const projectedReliability=clamp(baseline+(reliabilityGap*dataEffectiveness),baseline,targetReliability);
+
+  return {
+    score:Math.round(projectedReliability*100),
+    lift:Math.round((projectedReliability-baseline)*100),
+    recommended
+  };
+}
 function updateDemo(){
   const scenario=scenarioData[activeScenario];
   const success=Number(successRange.value);
   const clips=Number(clipsRange.value);
   const complexity=Number(complexityRange.value);
-  const coverage=Math.min(22, Math.round((clips/scenario.clipBase)*14));
-  const difficultyPenalty=Math.round(complexity*1.6);
-  const lift=Math.max(8, scenario.lift + coverage - Math.round(success/9) - Math.round(complexity/3));
-  const score=Math.min(96, Math.max(38, success + lift + 18 - difficultyPenalty));
-  const recommended=Math.round((scenario.clipBase + complexity*220 + Math.max(0, 70-success)*22)/100)*100;
+  const projection=getDemoProjection(scenario,success,clips,complexity);
 
   successOut.textContent=success+'%';
   clipsOut.textContent=clips.toLocaleString();
   complexityOut.textContent=complexity+'/10';
-  pickScore.innerHTML=score+'<span>/100</span>';
-  pickMeter.style.width=score+'%';
-  liftOut.textContent='+'+lift+'%';
-  packOut.textContent=formatClips(recommended);
+  pickScore.innerHTML=projection.score+'<span>/100</span>';
+  pickMeter.style.width=projection.score+'%';
+  liftOut.textContent='+'+projection.lift+'%';
+  packOut.textContent=formatClips(projection.recommended);
   captureTitle.textContent=scenario.title;
   captureNote.textContent=scenario.note;
 }
